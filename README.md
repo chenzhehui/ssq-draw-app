@@ -31,6 +31,19 @@ ssh -N -o ExitOnForwardFailure=yes -L 8765:127.0.0.1:8765 用户名@服务器IP
 
 Linux 上可运行 `python3 -m unittest discover -s tests -v`，其中包含后台启动、重复启动、停止、重启的集成测试。Windows 环境会跳过该 Linux 专用测试。
 
+## 部署与开发约定（重要）
+
+本项目在公网以**子路径**形式反代部署（例如 `https://<站点>/ssq-draw/`），不是部署在站点根路径。
+
+- **前端（`static/` 下的 HTML / JS）中新增任何请求路径，必须使用相对路径，不能带前导 `/`。**
+  - ✅ 正确：`api('api/reroll')`、`fetch('api/state')`
+  - ❌ 错误：`api('/api/reroll')`、`fetch('/api/state')`
+  - 原因：以 `/` 开头的绝对路径会请求到站点根路径（`https://<站点>/api/...`），绕过子路径反代，导致 404。
+  - 同理，`index.html` 里的静态资源引用（`style.css`、`app.js`、`favicon.svg`）也必须用相对路径。
+- 后端 `app.py` 的路由保持 `/api/...` 绝对路径不变（反代层会剥离子路径前缀），不要改。
+- 后端通过 `SSQ_PUBLIC_ORIGIN` 环境变量放行公网来源的 Host/Origin 校验，`X-App-Token` 校验始终保留；新增后端接口时不要绕过这两项校验。
+- 修改后请运行 `python3 -m unittest discover -s tests -v` 并确认全部通过；若在服务器上，重启系统服务（systemd 单元 `ssq-draw.service`）后走公网 URL 回归验证一次。
+
 ## 修改号码与自动算奖
 
 摇号结果出来后，每注右侧可以单独点击“修改”，调整6个红球和1个蓝球，也可以点击“重摇”只替换这一行；其它行不会改变。保存或重摇时会保留原始生成号码作为记录，并同步保存到浏览器本地记录。复制和导出使用修改后的号码。

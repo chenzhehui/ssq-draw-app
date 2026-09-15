@@ -53,7 +53,8 @@ class FrontendControlTests(unittest.TestCase):
         script = (ROOT / 'static/app.js').read_text(encoding='utf-8')
         self.assertIn('重摇', script)
         self.assertIn('function rerollTicket', script)
-        self.assertIn("api('/api/reroll'", script)
+        self.assertIn("api('api/reroll'", script)
+        self.assertNotIn("api('/api/reroll'", script)
         self.assertIn('batch.tickets[index] = result.ticket', script)
         self.assertNotIn("copy.className = 'row-copy'", script)
 
