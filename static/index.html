@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#eef0e6">
+  <title>一摇 · 本地双色球摇号台</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="一摇首页"><span class="brand-mark">一</span><span>一摇<span class="brand-sub">YI YAO / LOCAL DRAW</span></span></a>
+      <span class="local-label"><i></i>只在你的电脑上运行</span>
+    </header>
+
+    <main>
+      <section class="intro">
+        <div><p class="eyebrow">双色球 · 私人摇号台</p><h1>不猜下一期。<br>认真摇一注<span class="period">。</span></h1></div>
+        <div class="intro-note"><span class="note-line"></span><p>把随机交给系统，<br>把偏好留给自己。</p><span>不追热号，不强制换号。<br>每一次点击，都是一次新的随机抽取。</span></div>
+      </section>
+
+      <div id="notice" class="notice" role="status" hidden></div>
+      <section class="workbench" aria-label="摇号控制台">
+        <div class="draw-panel">
+          <div class="panel-top"><span class="section-label">01 / 摇号台</span><span class="entropy-label"><i></i>系统安全随机源</span></div>
+          <div class="machine" id="machine">
+            <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+            <p class="machine-caption" id="machine-caption">六颗红球，一颗蓝球。准备好了就开始。</p>
+            <div class="balls" id="balls" aria-label="本次首注号码" aria-live="polite">
+              <span class="ball empty">--</span><span class="ball empty">--</span><span class="ball empty">--</span><span class="ball empty">--</span><span class="ball empty">--</span><span class="ball empty">--</span><span class="ball blue empty">--</span>
+            </div>
+            <div class="machine-footer"><span>红球 01—33 · 不放回抽取</span><span>蓝球 01—16 · 独立抽取</span></div>
+          </div>
+          <div class="draw-controls">
+            <fieldset class="mode-switch"><legend class="sr-only">选择摇号模式</legend>
+              <label><input type="radio" name="mode" value="uniform" checked><span>纯随机 <small>推荐起点</small></span></label>
+              <label><input type="radio" name="mode" value="weighted"><span>微调加权</span></label>
+            </fieldset>
+            <p id="mode-description" class="mode-description">每颗球权重相同。历史开奖不参与本次选择。</p>
+            <div class="action-line">
+              <div class="quantity"><label for="count">一次摇</label><div class="stepper"><button id="minus" type="button" aria-label="减少注数">−</button><input id="count" type="number" min="1" max="20" value="5" inputmode="numeric" aria-label="摇号注数"><button id="plus" type="button" aria-label="增加注数">+</button></div><span>注</span></div>
+              <button id="draw" class="primary-button" type="button" disabled><span id="draw-label">连接摇号台…</span><span aria-hidden="true">↗</span></button>
+            </div>
+            <p class="quiet-line">允许号码重复，不设置冷热配额，也不因上次选过而排除。</p>
+          </div>
+        </div>
+
+        <aside class="settings-panel">
+          <div class="panel-top"><span class="section-label">02 / 可控的偏好</span><span class="small-tag" id="weight-tag">当前未启用</span></div>
+          <h2>轻一点，才叫微调。</h2>
+          <p class="settings-copy">随机仍然是主角。历史数据只在你选择微调模式后，改变一点点抽取权重。</p>
+          <div class="strength-head"><label for="strength">单球权重调整上限</label><strong id="strength-value">±5<span>%</span></strong></div>
+          <input id="strength" type="range" min="0" max="10" step="1" value="5" disabled aria-label="单球权重调整上限百分比">
+          <div class="range-labels"><span>0% · 无偏好</span><span>10% · 上限</span></div>
+          <div class="formula-note"><span class="tiny-label">微调怎么来？</span><p>近10期与此前10期比较。次数增加，权重微升；次数减少，权重微降。更早记录不参与。</p><small>调整的是抽样权重，不是中奖概率。上限由你设定，不是训练结论。</small></div>
+          <div class="schedule"><div><label for="interval">自动更新数据</label><p>仅在本地程序运行期间</p></div><select id="interval" aria-label="自动更新周期"><option value="1">每 1 小时</option><option value="3">每 3 小时</option><option value="6">每 6 小时</option><option value="12">每 12 小时</option></select></div>
+          <p class="next-refresh" id="next-refresh">正在读取更新计划…</p>
+        </aside>
+      </section>
+
+      <section class="results-section" aria-labelledby="results-title">
+        <div class="section-heading"><div><span class="section-label">03 / 留下这一摇</span><h2 id="results-title">你的号码<span id="result-count" class="count-badge">等待开始</span></h2></div><div class="result-actions"><button id="copy" type="button" class="text-button" disabled>复制纯文本</button><button id="export" type="button" class="text-button" disabled>导出记录 ↗</button></div></div>
+        <div id="results" class="results empty-results"><span class="empty-symbol" aria-hidden="true">＋</span><p>还没有号码。<br><small>摇好之后，整组复制，不用一个个抄。</small></p></div>
+        <div class="receipt" id="receipt" hidden></div>
+        <details id="plain-details" class="plain-details" hidden><summary>展开纯文本，可直接全选复制</summary><textarea id="plain-output" readonly aria-label="本次号码纯文本" spellcheck="false"></textarea></details>
+        <div id="recent-batches" class="recent-batches" hidden><span>最近几次</span><div id="batch-buttons"></div></div>
+      </section>
+
+      <section class="evidence-section">
+        <div class="data-panel">
+          <div class="section-heading"><div><span class="section-label">真实数据 / 最近三期</span><h2>有来源，才有微调。</h2></div><button id="refresh" class="text-button" type="button">立即更新 ↻</button></div>
+          <div class="data-status"><span id="data-status" class="status-chip">正在连接</span><span id="checked-at">尚未校验数据</span></div>
+          <div id="latest-draws" class="latest-draws"><p class="muted">正在读取真实开奖，不生成替代数据。</p></div>
+          <a class="source-link" href="https://www.gdfc.org.cn/charts/ssq/indicators.html?period=50" target="_blank" rel="noreferrer">广东福彩 · 最近50期统计页 ↗</a>
+        </div>
+        <div class="principles-panel"><span class="section-label">关于随机 / 不藏种子</span><h2>不需要挑一个<br>“幸运种子”。</h2><p>使用 Python secrets 调用操作系统的密码学安全随机源。不会拿时间戳、鼠标轨迹或历史开奖号码充当种子，也没有随机失败后的弱算法回退。</p><details><summary>查看随机与加权规则</summary><p>每次抽取都使用 secrets.randbelow。纯随机时所有球的权重均为10000；微调时权重 = 10000 × [1 + 上限 × (近10期次数 − 此前10期次数) ÷ 10]，以整数对称取整。</p><p>红球按当前剩余权重逐次抽取，抽中后移除；蓝球单独抽取。种子与内部随机状态不显示、不保存。批次编号与权重快照只是记录标识，不是种子。</p><a href="https://docs.python.org/3/library/secrets.html" target="_blank" rel="noreferrer">Python 官方随机源说明 ↗</a></details></div>
+      </section>
+
+      <details class="weights-details" id="weights-details"><summary><span>查看每颗球的微调权重<span class="detail-sub">透明，而不是神秘的评分</span></span><span class="expand-sign">＋</span></summary><p class="weights-note" id="weights-note">展开后读取真实数据计算的权重预览。纯随机模式不使用这些权重。</p><h3>红球</h3><div id="red-weights" class="weight-grid"></div><h3>蓝球</h3><div id="blue-weights" class="weight-grid"></div></details>
+    </main>
+    <footer><span>一摇 · 本地运行，独立工具，非官方开奖系统。</span><span>小额娱乐，量力而行。任何加权都没有经过验证的中奖优势。</span></footer>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
