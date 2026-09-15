@@ -216,7 +216,7 @@ async function rerollTicket(batch, index) {
   busy = true; editingIndex = null; clearPrizeCheck(); updateControls();
   try {
     const weighted = batch.snapshot?.mode === 'weighted';
-    const result = await api('/api/reroll', {
+    const result = await api('api/reroll', {
       mode: weighted ? 'weighted' : 'uniform',
       strength: weighted ? Number(batch.snapshot.strength) : 0,
     });
@@ -355,7 +355,7 @@ async function checkPrize() {
   if (!issue) { toast('当前号码没有关联待开奖期号'); return; }
   const button = $('check-prize'); button.disabled = true; button.textContent = '识别中…';
   try {
-    const result = await api('/api/check', { tickets: current.tickets, issue, fuyun_active: $('fuyun').checked });
+    const result = await api('api/check', { tickets: current.tickets, issue, fuyun_active: $('fuyun').checked });
     prizeCheck = result;
     if (result.pending) { renderPrizePending(result); toast(`第${result.issue}期尚未开奖`); }
     else { renderPrizeCheck(result); toast(`第${result.issue}期已完成算奖`); }
