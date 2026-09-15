@@ -11,6 +11,8 @@ let weightTimer;
 let weightRequest = 0;
 let weightSignature = '';
 let batches = [];
+let editingIndex = null;
+let prizeCheck = null;
 
 function validBatch(batch) {
   return batch && Array.isArray(batch.tickets) && batch.tickets.length >= 1 && batch.tickets.length <= 20 &&
@@ -25,6 +27,38 @@ try {
 
 function mode() {
   return document.querySelector('input[name="mode"]:checked').value;
+}
+
+function persistBatches() {
+  try { localStorage.setItem(storageKey, JSON.stringify(batches)); }
+  catch { toast('号码已修改，但浏览器未允许保存记录'); }
+}
+
+function clearPrizeCheck() {
+  prizeCheck = null;
+  $('prize-results').hidden = true;
+  $('prize-results').replaceChildren();
+}
+
+function clearCurrent() {
+  if (!current || busy) return;
+  current = null; editingIndex = null; clearPrizeCheck();
+  const root = $('results'); root.replaceChildren(); root.className = 'results empty-results';
+  const symbol = document.createElement('span'); symbol.className = 'empty-symbol'; symbol.setAttribute('aria-hidden', 'true'); symbol.textContent = '＋';
+  const message = document.createElement('p'); message.textContent = '还没有号码。';
+  const hint = document.createElement('small'); hint.textContent = '摇好之后，整组复制，不用一个个抄。'; message.append(document.createElement('br'), hint);
+  root.append(symbol, message);
+  $('result-count').textContent = '等待开始'; $('receipt').hidden = true; $('plain-details').hidden = true; $('plain-output').value = '';
+  $('prize-options').hidden = true; $('fuyun').checked = false; $('copy').disabled = true; $('export').disabled = true;
+  $('machine-caption').textContent = '六颗红球，一颗蓝球。准备好了就开始。'; showBalls(null); updateControls(); toast('已清空当前号码，最近批次仍保留');
+}
+
+function parseTicket(redValues, blueValue) {
+  const red = redValues.map((value) => Number(value));
+  const blue = Number(blueValue);
+  if (red.some((n) => !Number.isInteger(n) || n < 1 || n > 33) || new Set(red).size !== 6 ||
+      !Number.isInteger(blue) || blue < 1 || blue > 16) return null;
+  return { red: red.sort((a, b) => a - b), blue };
 }
 
 function toast(message) {
@@ -61,6 +95,8 @@ async function api(path, body) {
 
 function updateControls() {
   const weighted = mode() === 'weighted';
+  const target = current ? targetIssue(current) : '';
+  const prizeReady = Boolean(current && target && state?.weighted_available && isIssueDrawn(target));
   $('strength').disabled = !weighted || busy;
   $('weight-tag').textContent = weighted ? '微调已启用' : '当前未启用';
   $('mode-description').textContent = weighted
@@ -70,6 +106,9 @@ function updateControls() {
   $('draw-label').textContent = busy ? '正在摇号…' : !state ? '等待本地服务' : weighted && !state.weighted_available ? '请先更新数据' : '开始摇号';
   $('refresh').disabled = !state || state.refreshing;
   $('refresh').textContent = state?.refreshing ? '正在更新…' : '立即更新 ↻';
+  $('check-prize').disabled = busy || !prizeReady || editingIndex !== null;
+  $('check-prize').textContent = current && !prizeReady ? '等待开奖' : '自动算奖';
+  $('clear').disabled = busy || !current || editingIndex !== null;
   document.querySelectorAll('input[name="mode"]').forEach((input) => { input.disabled = busy; });
 }
 
@@ -99,12 +138,12 @@ async function loadState() {
     $('data-status').textContent = state.weighted_available ? `${state.count}期 · 校验通过` : state.refreshing ? '更新中' : state.count ? '缓存数据 · 微调暂停' : '等待真实数据';
     $('data-status').classList.toggle('error', !state.weighted_available && !state.refreshing);
     $('checked-at').textContent = state.last_success ? `上次校验 ${dateText(state.last_success, true)}` : '尚未校验数据';
-    $('interval').value = String(state.interval_hours);
     $('next-refresh').textContent = state.refreshing ? '正在从广东福彩读取最新50期…' : `下次检查 ${dateText(state.next_refresh, true)}${state.error ? ' · 失败后10分钟重试' : ''}`;
     $('notice').hidden = state.weighted_available || (!state.error && state.refreshing);
     $('notice').textContent = state.error ? `${state.error}。微调模式暂停；你仍可主动选择纯随机。`
       : '尚无有效的最新数据，或缓存已超过24小时。微调暂停；纯随机不依赖历史数据。';
     renderHistory();
+    renderBatchButtons();
     updateControls();
     const signature = `${state.last_success}:${state.weighted_available}:${$('strength').value}`;
     if ($('weights-details').open && signature !== weightSignature) {
@@ -145,6 +184,33 @@ function showBalls(ticket) {
   });
 }
 
+function numberInput(value, className, label, max) {
+  const input = document.createElement('input');
+  input.type = 'number'; input.min = '1'; input.max = String(max); input.value = String(value);
+  input.className = className; input.inputMode = 'numeric'; input.setAttribute('aria-label', label);
+  return input;
+}
+
+function renderTicketEditor(row, ticket, index, batch) {
+  const form = document.createElement('div'); form.className = 'edit-form';
+  const red = document.createElement('div'); red.className = 'edit-red';
+  ticket.red.forEach((value, position) => red.append(numberInput(value, 'edit-red-number', `第${index + 1}注红球${position + 1}`, 33)));
+  const plus = document.createElement('span'); plus.className = 'edit-plus'; plus.textContent = '+';
+  const blue = numberInput(ticket.blue, 'edit-blue-number', `第${index + 1}注蓝球`, 16);
+  const actions = document.createElement('div'); actions.className = 'edit-actions';
+  const save = document.createElement('button'); save.type = 'button'; save.className = 'edit-save'; save.textContent = '保存';
+  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'edit-cancel'; cancel.textContent = '取消';
+  save.addEventListener('click', () => {
+    const next = parseTicket([...red.children].map((input) => input.value), blue.value);
+    if (!next) { toast('红球必须为1-33且不能重复，蓝球必须为1-16'); return; }
+    if (!batch.original_tickets) batch.original_tickets = batch.tickets.map((item) => ({ red: [...item.red], blue: item.blue }));
+    batch.tickets[index] = next; batch.edited = true; batch.edited_at = new Date().toISOString();
+    editingIndex = null; persistBatches(); clearPrizeCheck(); renderBatch(batch); toast(`第${index + 1}注已修改`);
+  });
+  cancel.addEventListener('click', () => { editingIndex = null; renderBatch(batch); });
+  actions.append(save, cancel); form.append(red, plus, blue, actions); row.append(form);
+}
+
 function renderBatch(batch) {
   if (!validBatch(batch)) return;
   current = batch;
@@ -152,36 +218,125 @@ function renderBatch(batch) {
   batch.tickets.forEach((ticket, index) => {
     const row = document.createElement('div'); row.className = 'result-row';
     const number = document.createElement('span'); number.className = 'row-index'; number.textContent = format(index + 1);
-    const text = document.createElement('span'); text.className = 'row-numbers'; text.textContent = ticket.red.map(format).join(' ');
-    const plus = document.createElement('span'); plus.className = 'row-plus'; plus.textContent = '+';
-    const blue = document.createElement('span'); blue.className = 'row-blue'; blue.textContent = format(ticket.blue);
-    text.append(plus, blue);
-    const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'row-copy'; copy.textContent = '复制'; copy.setAttribute('aria-label', `复制第${index + 1}注`);
-    copy.addEventListener('click', () => copyText(`${ticket.red.map(format).join(' ')} + ${format(ticket.blue)}`));
-    row.append(number, text, copy); root.append(row);
+    row.append(number);
+    if (editingIndex === index) {
+      renderTicketEditor(row, ticket, index, batch);
+    } else {
+      const text = document.createElement('span'); text.className = 'row-numbers'; text.textContent = ticket.red.map(format).join(' ');
+      const plus = document.createElement('span'); plus.className = 'row-plus'; plus.textContent = '+';
+      const blue = document.createElement('span'); blue.className = 'row-blue'; blue.textContent = format(ticket.blue);
+      text.append(plus, blue);
+      const actions = document.createElement('div'); actions.className = 'row-actions';
+      const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'row-copy'; copy.textContent = '复制'; copy.setAttribute('aria-label', `复制第${index + 1}注`);
+      copy.addEventListener('click', () => copyText(`${ticket.red.map(format).join(' ')} + ${format(ticket.blue)}`));
+      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'row-edit'; edit.textContent = '修改'; edit.setAttribute('aria-label', `修改第${index + 1}注`);
+      edit.addEventListener('click', () => { if (!busy) { editingIndex = index; clearPrizeCheck(); renderBatch(batch); updateControls(); } });
+      actions.append(copy, edit); row.append(text, actions);
+    }
+    root.append(row);
   });
   const weighted = batch.snapshot?.mode === 'weighted';
-  $('result-count').textContent = `${batch.tickets.length}注 · ${weighted ? '微调加权' : '纯随机'}`;
+  const issue = targetIssue(batch);
+  $('result-count').textContent = `${batch.tickets.length}注 · ${weighted ? '微调加权' : '纯随机'}${batch.edited ? ' · 已修改' : ''}`;
   $('machine-caption').textContent = `首注预览 · ${dateText(batch.created_at)} · ${weighted ? '微调加权' : '纯随机'}`;
   $('receipt').hidden = false;
-  $('receipt').textContent = `${dateText(batch.created_at, true)} / 批次 ${batch.batch_id || ''} / 快照 ${(batch.snapshot_id || '').slice(0, 12)}${weighted ? ` / 数据期号 ${batch.snapshot.latest_issue} / 最大±${batch.snapshot.strength}%` : ' / 历史权重未参与'}`;
-  $('copy').disabled = false; $('export').disabled = false;
-  $('plain-details').hidden = false;
-  $('plain-output').value = plainText(batch);
-  $('plain-output').rows = Math.min(batch.tickets.length + 1, 12);
-  showBalls(batch.tickets[0]);
-  renderBatchButtons();
+  $('receipt').textContent = `${dateText(batch.created_at, true)} / 批次 ${batch.batch_id || ''} / 快照 ${(batch.snapshot_id || '').slice(0, 12)}${issue ? ` / 目标期号 ${issue}` : ''}${weighted ? ` / 数据期号 ${batch.snapshot.latest_issue} / 最大±${batch.snapshot.strength}%` : ' / 历史权重未参与'}${batch.edited ? ' / 已手动修改' : ''}`;
+  $('copy').disabled = false; $('export').disabled = false; $('plain-details').hidden = false; $('prize-options').hidden = false;
+  $('plain-output').value = plainText(batch); $('plain-output').rows = Math.min(batch.tickets.length + 1, 12);
+  showBalls(batch.tickets[0]); renderBatchButtons(); updateControls();
+}
+
+function nextIssue(issue) {
+  if (!issue) return '';
+  const value = Number(issue);
+  return Number.isSafeInteger(value) ? String(value + 1).padStart(String(issue).length, '0') : '';
+}
+
+function targetIssue(batch) {
+  return batch.target_issue || nextIssue(batch.snapshot?.latest_issue || batch.reference_issue || state?.latest3?.[0]?.issue);
+}
+
+function isIssueDrawn(issue) {
+  const target = Number(issue);
+  const latest = Number(state?.latest3?.[0]?.issue);
+  return Number.isSafeInteger(target) && Number.isSafeInteger(latest) && latest >= target;
+}
+
+function batchButtonLabel(batch) {
+  const issue = targetIssue(batch);
+  return `${dateText(batch.created_at, true)} · ${issue ? `第${issue}期` : '未关联期号'} · ${batch.tickets.length}注`;
+}
+
+function removeBatch(batch) {
+  if (busy) return;
+  const index = batches.indexOf(batch);
+  if (index < 0) return;
+  batches.splice(index, 1);
+  persistBatches(); renderBatchButtons(); toast('已删除一条最近批次记录');
 }
 
 function renderBatchButtons() {
   const root = $('batch-buttons'); root.replaceChildren();
   $('recent-batches').hidden = batches.length === 0;
+  $('clear-batches').disabled = batches.length === 0 || busy;
   for (const batch of batches.slice(0, 5)) {
+    const item = document.createElement('div'); item.className = 'recent-batch';
     const button = document.createElement('button'); button.type = 'button';
-    button.textContent = `${dateText(batch.created_at)} · ${batch.tickets.length}注`;
-    button.addEventListener('click', () => { if (!busy) renderBatch(batch); });
-    root.append(button);
+    button.textContent = batchButtonLabel(batch);
+    button.addEventListener('click', () => { if (!busy) { editingIndex = null; clearPrizeCheck(); renderBatch(batch); } });
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'batch-delete'; remove.textContent = 'x';
+    remove.setAttribute('aria-label', `删除${batchButtonLabel(batch)}`);
+    remove.addEventListener('click', () => removeBatch(batch));
+    item.append(button, remove); root.append(item);
   }
+}
+
+function clearBatches() {
+  if (!batches.length || busy) return;
+  batches = []; persistBatches(); renderBatchButtons(); toast('最近批次记录已清空');
+}
+
+function renderPrizeCheck(result) {
+  const root = $('prize-results'); root.replaceChildren(); root.hidden = false;
+  const heading = document.createElement('div'); heading.className = 'prize-heading';
+  const title = document.createElement('strong'); title.textContent = `第${result.issue}期识别结果`;
+  const summary = document.createElement('span'); summary.textContent = `${result.summary.winning}/${result.summary.total}注命中 · 固定奖金${result.summary.fixed_prize_total}元${result.summary.floating_prize_count ? ` · 浮动奖${result.summary.floating_prize_count}注` : ''}`; heading.append(title, summary);
+  const draw = document.createElement('p'); draw.className = 'prize-draw';
+  draw.textContent = `开奖号码：${result.winning_draw.red.map(format).join(' ')} + ${format(result.winning_draw.blue)} · 校验于 ${dateText(result.checked_at, true)}`;
+  root.append(heading, draw);
+  for (const item of result.results) {
+    const row = document.createElement('div'); row.className = `prize-row ${item.level === '未中奖' ? 'no-prize' : 'won'}`;
+    const index = document.createElement('span'); index.className = 'row-index'; index.textContent = format(result.results.indexOf(item) + 1);
+    const condition = document.createElement('span'); condition.className = 'prize-condition'; condition.textContent = `${item.condition} · 红${item.red_matches} ${item.blue_match ? '蓝中' : '蓝未中'}`;
+    const level = document.createElement('strong'); level.className = 'prize-level'; level.textContent = item.level;
+    const amount = document.createElement('span'); amount.className = 'prize-amount'; amount.textContent = item.prize_display;
+    row.append(index, condition, level, amount); root.append(row);
+  }
+  const note = document.createElement('small'); note.className = 'prize-note'; note.textContent = result.fuyun_active ? '已按你勾选的特别规定识别福运奖；浮动奖级具体金额以官方公告为准。' : '一等奖、二等奖为浮动奖级；其余显示固定奖金。最终以官方开奖公告为准。'; root.append(note);
+}
+
+function renderPrizePending(result) {
+  const root = $('prize-results'); root.replaceChildren(); root.hidden = false;
+  const heading = document.createElement('div'); heading.className = 'prize-heading';
+  const title = document.createElement('strong'); title.textContent = `第${result.issue}期待开奖`;
+  const summary = document.createElement('span'); summary.textContent = `当前最新第${result.latest_issue}期`; heading.append(title, summary);
+  const message = document.createElement('p'); message.className = 'prize-draw'; message.textContent = `第${result.issue}期尚未发布真实开奖号码 · 数据校验于 ${dateText(result.checked_at, true)}`;
+  const note = document.createElement('small'); note.className = 'prize-note'; note.textContent = '现在不能计算中奖。开奖后点击“立即更新”，再点击“自动算奖”。';
+  root.append(heading, message, note);
+}
+
+async function checkPrize() {
+  if (!current || editingIndex !== null || busy) return;
+  const issue = targetIssue(current);
+  if (!issue) { toast('当前号码没有关联待开奖期号'); return; }
+  const button = $('check-prize'); button.disabled = true; button.textContent = '识别中…';
+  try {
+    const result = await api('/api/check', { tickets: current.tickets, issue, fuyun_active: $('fuyun').checked });
+    prizeCheck = result;
+    if (result.pending) { renderPrizePending(result); toast(`第${result.issue}期尚未开奖`); }
+    else { renderPrizeCheck(result); toast(`第${result.issue}期已完成算奖`); }
+  } catch (error) { toast(error.message || '算奖失败'); }
+  finally { button.textContent = '自动算奖'; updateControls(); }
 }
 
 function countValue() {
@@ -192,15 +347,17 @@ function countValue() {
 async function draw() {
   if (busy) return;
   const count = countValue(); $('count').value = String(count);
-  busy = true; updateControls();
+  busy = true; editingIndex = null; clearPrizeCheck(); updateControls();
   $('machine').classList.remove('is-revealing'); $('machine').classList.add('is-spinning'); showBalls(null);
   $('machine-caption').textContent = '交给系统随机源，正在抽取…';
   try {
     const batch = await api('api/draw', { count, mode: mode(), strength: Number($('strength').value) });
     if (!validBatch(batch)) throw new Error('返回的号码格式异常，已停止显示');
+    batch.reference_issue = state?.latest3?.[0]?.issue || null;
+    batch.target_issue = nextIssue(batch.reference_issue);
     if (!matchMedia('(prefers-reduced-motion: reduce)').matches) await new Promise((resolve) => setTimeout(resolve, 650));
     batches.unshift(batch); batches = batches.slice(0, 10);
-    try { localStorage.setItem(storageKey, JSON.stringify(batches)); } catch { toast('号码已生成，但浏览器未允许保存记录'); }
+    persistBatches();
     renderBatch(batch);
     $('machine').classList.remove('is-spinning'); $('machine').classList.add('is-revealing');
   } catch (error) {
@@ -252,10 +409,6 @@ $('strength').addEventListener('input', () => {
   updateControls(); clearTimeout(weightTimer);
   if ($('weights-details').open) weightTimer = setTimeout(loadWeights, 180);
 });
-$('interval').addEventListener('change', async () => {
-  try { await api('api/settings', { interval_hours: Number($('interval').value) }); await loadState(); toast('自动更新周期已保存'); }
-  catch (error) { toast(error.message); await loadState(); }
-});
 $('refresh').addEventListener('click', async () => {
   try {
     $('refresh').disabled = true;
@@ -267,6 +420,9 @@ $('refresh').addEventListener('click', async () => {
   } catch (error) { toast(error.message); updateControls(); }
 });
 $('copy').addEventListener('click', () => { if (current) copyText(plainText(current)); });
+$('check-prize').addEventListener('click', checkPrize);
+$('clear').addEventListener('click', clearCurrent);
+$('clear-batches').addEventListener('click', clearBatches);
 $('plain-output').addEventListener('click', () => $('plain-output').select());
 $('export').addEventListener('click', () => {
   if (!current) return;

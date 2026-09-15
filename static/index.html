@@ -56,17 +56,19 @@
           <input id="strength" type="range" min="0" max="10" step="1" value="5" disabled aria-label="单球权重调整上限百分比">
           <div class="range-labels"><span>0% · 无偏好</span><span>10% · 上限</span></div>
           <div class="formula-note"><span class="tiny-label">微调怎么来？</span><p>近10期与此前10期比较。次数增加，权重微升；次数减少，权重微降。更早记录不参与。</p><small>调整的是抽样权重，不是中奖概率。上限由你设定，不是训练结论。</small></div>
-          <div class="schedule"><div><label for="interval">自动更新数据</label><p>仅在本地程序运行期间</p></div><select id="interval" aria-label="自动更新周期"><option value="1">每 1 小时</option><option value="3">每 3 小时</option><option value="6">每 6 小时</option><option value="12">每 12 小时</option></select></div>
+          <div class="schedule"><div><span class="schedule-label">自动更新数据</span><p>仅在本地程序运行期间</p></div><span class="fixed-interval">每 12 小时</span></div>
           <p class="next-refresh" id="next-refresh">正在读取更新计划…</p>
         </aside>
       </section>
 
       <section class="results-section" aria-labelledby="results-title">
-        <div class="section-heading"><div><span class="section-label">03 / 留下这一摇</span><h2 id="results-title">你的号码<span id="result-count" class="count-badge">等待开始</span></h2></div><div class="result-actions"><button id="copy" type="button" class="text-button" disabled>复制纯文本</button><button id="export" type="button" class="text-button" disabled>导出记录 ↗</button></div></div>
+        <div class="section-heading"><div><span class="section-label">03 / 留下这一摇</span><h2 id="results-title">你的号码<span id="result-count" class="count-badge">等待开始</span></h2></div><div class="result-actions"><button id="check-prize" type="button" class="text-button" disabled>自动算奖</button><button id="copy" type="button" class="text-button" disabled>复制纯文本</button><button id="export" type="button" class="text-button" disabled>导出记录 ↗</button><button id="clear" type="button" class="text-button clear-button" disabled>清空我的号码</button></div></div>
         <div id="results" class="results empty-results"><span class="empty-symbol" aria-hidden="true">＋</span><p>还没有号码。<br><small>摇好之后，整组复制，不用一个个抄。</small></p></div>
         <div class="receipt" id="receipt" hidden></div>
         <details id="plain-details" class="plain-details" hidden><summary>展开纯文本，可直接全选复制</summary><textarea id="plain-output" readonly aria-label="本次号码纯文本" spellcheck="false"></textarea></details>
-        <div id="recent-batches" class="recent-batches" hidden><span>最近几次</span><div id="batch-buttons"></div></div>
+        <div id="prize-options" class="prize-options" hidden><label><input id="fuyun" type="checkbox"> 当期特别规定已开启，包含福运奖（3个红球）</label><small>默认不勾选；请以该期官方开奖公告为准。</small></div>
+        <div id="prize-results" class="prize-results" hidden aria-live="polite"></div>
+        <div id="recent-batches" class="recent-batches" hidden><span>最近几次</span><div id="batch-buttons"></div><button id="clear-batches" class="text-button" type="button" disabled>清空记录</button></div>
       </section>
 
       <section class="evidence-section">

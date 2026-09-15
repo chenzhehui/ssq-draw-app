@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
+import re
 import secrets
 import sys
 import threading
@@ -14,10 +15,11 @@ import time
 from urllib.parse import urlsplit, parse_qs
 import webbrowser
 
-from engine import SOURCE, calculate_weights, draw_batch, fetch_history, validate_history
+from engine import SOURCE, calculate_weights, check_tickets, draw_batch, fetch_history, validate_history
 
 ROOT = Path(__file__).resolve().parent
 MAX_AGE = 24 * 3600
+REFRESH_INTERVAL_HOURS = 12
 PUBLIC_ORIGIN = os.environ.get('SSQ_PUBLIC_ORIGIN', '').strip().rstrip('/')
 
 
@@ -30,13 +32,7 @@ class DataStore:
         self.folder, self.fetcher, self.clock = Path(folder), fetcher, clock
         self.lock, self.stop = threading.RLock(), threading.Event()
         self.history, self.last_success, self.error, self.busy = [], 0, None, False
-        self.interval_hours, self.next_due = 1, self.clock()
-        try:
-            settings = json.loads((self.folder / 'settings.json').read_text(encoding='utf-8'))
-            if settings['interval_hours'] in (1, 3, 6, 12):
-                self.interval_hours = settings['interval_hours']
-        except (OSError, ValueError, KeyError, TypeError):
-            pass
+        self.interval_hours, self.next_due = REFRESH_INTERVAL_HOURS, self.clock()
         try:
             data = json.loads((self.folder / 'history.json').read_text(encoding='utf-8'))
             history = validate_history(data['draws'])
@@ -90,14 +86,6 @@ class DataStore:
                 self.busy = False
                 raise
 
-    def set_interval(self, hours):
-        if type(hours) is not int or hours not in (1, 3, 6, 12):
-            raise ValueError('更新周期只能为1、3、6或12小时')
-        with self.lock:
-            self._save('settings.json', {'interval_hours': hours})
-            self.interval_hours = hours
-            self.next_due = self.clock() + hours * 3600
-
     def state(self):
         with self.lock:
             available = bool(self.history and not self.error and 0 <= self.clock() - self.last_success < MAX_AGE)
@@ -116,6 +104,26 @@ class DataStore:
             if not self.state()['weighted_available']:
                 raise RuntimeError('无法获取数据，或数据已过期。请更新数据或主动切换纯随机。')
             return copy.deepcopy(self.history), timestamp(self.last_success)
+
+    def latest_draw(self):
+        with self.lock:
+            if not self.history or self.error or not 0 <= self.clock() - self.last_success < MAX_AGE:
+                raise RuntimeError('无法获取有效的最新开奖数据，暂时不能算奖。')
+            return copy.deepcopy(self.history[0]), timestamp(self.last_success)
+
+    def draw_for_issue(self, issue):
+        if not isinstance(issue, str) or not re.fullmatch(r'20\d{5}', issue):
+            raise ValueError('开奖期号无效')
+        with self.lock:
+            if not self.history or self.error or not 0 <= self.clock() - self.last_success < MAX_AGE:
+                raise RuntimeError('无法获取有效的最新开奖数据，暂时不能算奖。')
+            for draw in self.history:
+                if draw['issue'] == issue:
+                    return copy.deepcopy(draw), timestamp(self.last_success), None
+            latest_issue = self.history[0]['issue']
+            if issue > latest_issue:
+                return None, timestamp(self.last_success), latest_issue
+            raise RuntimeError(f'缓存中没有第{issue}期的真实开奖数据，暂时不能算奖。')
 
     def run_scheduler(self):
         while not self.stop.is_set():
@@ -203,9 +211,15 @@ def create_server(store, port=8765):
                 elif self.path == '/api/refresh':
                     store.request_refresh()
                     self.send(202, {'accepted': True})
-                elif self.path == '/api/settings':
-                    store.set_interval(data.get('interval_hours'))
-                    self.send(200, store.state())
+                elif self.path == '/api/check':
+                    winning_draw, checked_at, latest_issue = store.draw_for_issue(data.get('issue'))
+                    if winning_draw is None:
+                        self.send(200, {'pending': True, 'issue': data['issue'], 'latest_issue': latest_issue,
+                                        'checked_at': checked_at})
+                        return
+                    result = check_tickets(data.get('tickets'), winning_draw, data.get('fuyun_active', False))
+                    result['checked_at'] = checked_at
+                    self.send(200, result)
                 else:
                     self.send(404, {'error': 'Not found'})
             except RuntimeError as error:

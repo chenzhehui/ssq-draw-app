@@ -12,6 +12,17 @@ from urllib.request import Request, urlopen
 SOURCE = 'https://www.gdfc.org.cn/charts/ssq/indicators.html?period=50'
 RULE_VERSION = 'micro-delta-v1'
 BASE_WEIGHT = 10000
+PRIZE_LEVELS = ('一等奖', '二等奖', '三等奖', '四等奖', '五等奖', '六等奖', '福运奖', '未中奖')
+PRIZE_AMOUNTS = {
+    '一等奖': None,
+    '二等奖': None,
+    '三等奖': 3000,
+    '四等奖': 200,
+    '五等奖': 10,
+    '六等奖': 5,
+    '福运奖': 5,
+    '未中奖': 0,
+}
 
 
 class DrawTableParser(HTMLParser):
@@ -148,3 +159,69 @@ def draw_batch(count=5, mode='uniform', strength=5, history=None):
             'tickets': tickets, 'snapshot_id': snapshot_id, 'snapshot': snapshot,
             'random_source': 'secrets.randbelow / OS CSPRNG',
             'notice': '允许跨注重复；加权是偏好，不是经过验证的中奖优势。'}
+
+
+def validate_ticket(ticket):
+    if not isinstance(ticket, dict):
+        raise ValueError('投注号码必须是对象')
+    red, blue = ticket.get('red'), ticket.get('blue')
+    if (not isinstance(red, list) or len(red) != 6 or any(type(n) is not int for n in red)
+            or len(set(red)) != 6 or not all(1 <= n <= 33 for n in red)
+            or type(blue) is not int or not 1 <= blue <= 16):
+        raise ValueError('投注号码数量、范围或唯一性校验失败')
+    return {'red': sorted(red), 'blue': blue}
+
+
+def _winning_draw(draw):
+    if not isinstance(draw, dict):
+        raise ValueError('开奖号码必须是对象')
+    ticket = validate_ticket({'red': draw.get('red'), 'blue': draw.get('blue')})
+    issue = str(draw.get('issue', ''))
+    if issue and not re.fullmatch(r'20\d{5}', issue):
+        raise ValueError('开奖期号无效')
+    return {'issue': issue, **ticket}
+
+
+def evaluate_ticket(ticket, winning_draw, fuyun_active=False):
+    if type(fuyun_active) is not bool:
+        raise ValueError('福运奖开关无效')
+    ticket = validate_ticket(ticket)
+    winning = _winning_draw(winning_draw)
+    red_matches = len(set(ticket['red']) & set(winning['red']))
+    blue_match = ticket['blue'] == winning['blue']
+    if red_matches == 6 and blue_match:
+        level = '一等奖'
+    elif red_matches == 6:
+        level = '二等奖'
+    elif red_matches == 5 and blue_match:
+        level = '三等奖'
+    elif red_matches == 5 or (red_matches == 4 and blue_match):
+        level = '四等奖'
+    elif red_matches == 4 or (red_matches == 3 and blue_match):
+        level = '五等奖'
+    elif blue_match:
+        level = '六等奖'
+    elif fuyun_active and red_matches == 3:
+        level = '福运奖'
+    else:
+        level = '未中奖'
+    prize_amount = PRIZE_AMOUNTS[level]
+    return {'ticket': ticket, 'red_matches': red_matches, 'blue_match': blue_match,
+            'condition': f'{red_matches}+{1 if blue_match else 0}', 'level': level,
+            'prize_amount': prize_amount,
+            'prize_display': '浮动奖金' if prize_amount is None else f'{prize_amount}元'}
+
+
+def check_tickets(tickets, winning_draw, fuyun_active=False):
+    if not isinstance(tickets, list) or not 1 <= len(tickets) <= 20:
+        raise ValueError('待检查号码必须为1-20注')
+    winning = _winning_draw(winning_draw)
+    results = [evaluate_ticket(ticket, winning, fuyun_active) for ticket in tickets]
+    summary = {'total': len(results),
+               'winning': sum(result['level'] != '未中奖' for result in results),
+               'by_level': {level: sum(result['level'] == level for result in results)
+                            for level in PRIZE_LEVELS}}
+    summary['fixed_prize_total'] = sum(result['prize_amount'] or 0 for result in results)
+    summary['floating_prize_count'] = sum(result['prize_amount'] is None for result in results)
+    return {'issue': winning['issue'], 'winning_draw': winning, 'fuyun_active': fuyun_active,
+            'results': results, 'summary': summary}
