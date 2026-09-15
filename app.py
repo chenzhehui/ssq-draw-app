@@ -208,6 +208,12 @@ def create_server(store, port=8765):
                     batch = draw_batch(data.get('count', 5), mode, data.get('strength', 5), history)
                     batch['data_checked_at'] = checked_at
                     self.send(200, batch)
+                elif self.path == '/api/reroll':
+                    mode = data.get('mode', 'uniform')
+                    history, checked_at = store.weighted_snapshot() if mode == 'weighted' else (None, None)
+                    strength = data.get('strength', 5 if mode == 'weighted' else 0)
+                    batch = draw_batch(1, mode, strength, history)
+                    self.send(200, {'ticket': batch['tickets'][0], 'data_checked_at': checked_at})
                 elif self.path == '/api/refresh':
                     store.request_refresh()
                     self.send(202, {'accepted': True})

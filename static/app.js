@@ -211,6 +211,30 @@ function renderTicketEditor(row, ticket, index, batch) {
   actions.append(save, cancel); form.append(red, plus, blue, actions); row.append(form);
 }
 
+async function rerollTicket(batch, index) {
+  if (busy || !batch?.tickets[index]) return;
+  busy = true; editingIndex = null; clearPrizeCheck(); updateControls();
+  try {
+    const weighted = batch.snapshot?.mode === 'weighted';
+    const result = await api('/api/reroll', {
+      mode: weighted ? 'weighted' : 'uniform',
+      strength: weighted ? Number(batch.snapshot.strength) : 0,
+    });
+    if (!validBatch({ tickets: [result.ticket] })) throw new Error('返回的号码格式异常，已停止替换');
+    if (!batch.original_tickets) batch.original_tickets = batch.tickets.map((item) => ({ red: [...item.red], blue: item.blue }));
+    batch.tickets[index] = result.ticket;
+    batch.edited = true; batch.edited_at = new Date().toISOString();
+    persistBatches();
+    busy = false;
+    renderBatch(batch);
+    toast(`第${index + 1}注已重摇，其他号码未改变`);
+  } catch (error) {
+    toast(error.message || '重摇失败');
+  } finally {
+    busy = false; updateControls();
+  }
+}
+
 function renderBatch(batch) {
   if (!validBatch(batch)) return;
   current = batch;
@@ -227,11 +251,11 @@ function renderBatch(batch) {
       const blue = document.createElement('span'); blue.className = 'row-blue'; blue.textContent = format(ticket.blue);
       text.append(plus, blue);
       const actions = document.createElement('div'); actions.className = 'row-actions';
-      const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'row-copy'; copy.textContent = '复制'; copy.setAttribute('aria-label', `复制第${index + 1}注`);
-      copy.addEventListener('click', () => copyText(`${ticket.red.map(format).join(' ')} + ${format(ticket.blue)}`));
       const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'row-edit'; edit.textContent = '修改'; edit.setAttribute('aria-label', `修改第${index + 1}注`);
       edit.addEventListener('click', () => { if (!busy) { editingIndex = index; clearPrizeCheck(); renderBatch(batch); updateControls(); } });
-      actions.append(copy, edit); row.append(text, actions);
+      const reroll = document.createElement('button'); reroll.type = 'button'; reroll.className = 'row-reroll'; reroll.textContent = '重摇'; reroll.setAttribute('aria-label', `重摇第${index + 1}注`);
+      reroll.addEventListener('click', () => rerollTicket(batch, index));
+      actions.append(edit, reroll); row.append(text, actions);
     }
     root.append(row);
   });

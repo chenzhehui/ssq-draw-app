@@ -13,6 +13,31 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 class PrizeHTTPTests(unittest.TestCase):
+    def test_reroll_returns_one_ticket(self):
+        app = importlib.import_module('app')
+        with tempfile.TemporaryDirectory() as folder:
+            store = app.DataStore(Path(folder), fetcher=lambda: [])
+            server = app.create_server(store, 0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f'http://127.0.0.1:{server.server_port}'
+            try:
+                with urlopen(base + '/api/state') as response:
+                    state = json.load(response)
+                headers = {'Content-Type': 'application/json', 'X-App-Token': state['token']}
+                body = json.dumps({'mode': 'uniform', 'strength': 0}).encode()
+                with urlopen(Request(base + '/api/reroll', data=body, headers=headers)) as response:
+                    result = json.load(response)
+                self.assertIn('ticket', result)
+                self.assertEqual(len(result['ticket']['red']), 6)
+                self.assertEqual(len(set(result['ticket']['red'])), 6)
+                self.assertGreaterEqual(result['ticket']['blue'], 1)
+                self.assertLessEqual(result['ticket']['blue'], 16)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
     def test_check_uses_server_latest_draw_and_rejects_bad_ticket(self):
         app = importlib.import_module('app')
         with tempfile.TemporaryDirectory() as folder:
