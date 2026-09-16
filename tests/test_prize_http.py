@@ -13,6 +13,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 class PrizeHTTPTests(unittest.TestCase):
+    def test_trial_page_and_assets_are_served(self):
+        app = importlib.import_module('app')
+        with tempfile.TemporaryDirectory() as folder:
+            store = app.DataStore(Path(folder), fetcher=lambda: [])
+            server = app.create_server(store, 0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f'http://127.0.0.1:{server.server_port}'
+            try:
+                for path, marker in (('/trial.html', '<title>一摇 · 试命</title>'),
+                                     ('/trial.js', 'function stopTrial'),
+                                     ('/trial.css', '.trial-layout')):
+                    with urlopen(base + path) as response:
+                        body = response.read().decode('utf-8')
+                    self.assertIn(marker, body)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
     def test_reroll_returns_one_ticket(self):
         app = importlib.import_module('app')
         with tempfile.TemporaryDirectory() as folder:

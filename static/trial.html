@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#eef0e6">
+  <title>一摇 · 试命</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="trial.css">
+  <script src="trial.js" defer></script>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="一摇首页"><span class="brand-mark">一</span><span>一摇<span class="brand-sub">YI YAO / LOCAL DRAW</span></span></a>
+      <span class="local-label"><i></i>只在你的电脑上运行</span>
+    </header>
+
+    <main>
+      <section class="intro trial-intro">
+        <div><p class="eyebrow">双色球 · 本地试算</p><h1>试命这一期<span class="period">。</span></h1></div>
+        <div class="intro-note"><span class="note-line"></span><p>如果从现在开始，<br>要摇多久才会遇见它？</p><span>只做概率试算，不修改真实开奖。</span></div>
+      </section>
+
+      <div id="trial-notice" class="notice" role="status">正在读取最近三期真实开奖…</div>
+
+      <section class="trial-layout" aria-label="试命控制台">
+        <div class="draw-panel trial-panel">
+          <div class="panel-top"><span class="section-label">01 / 命运试算</span><span class="entropy-label"><i></i>浏览器安全随机源</span></div>
+          <div class="machine trial-machine" id="trial-machine">
+            <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+            <p class="machine-caption" id="trial-caption">准备好后，开始连续模拟。</p>
+            <div class="balls" id="trial-balls" aria-label="当前模拟号码" aria-live="polite">
+              <span class="ball empty">--</span><span class="ball empty">--</span><span class="ball empty">--</span><span class="ball empty">--</span><span class="ball empty">--</span><span class="ball empty">--</span><span class="ball blue empty">--</span>
+            </div>
+            <div class="machine-footer"><span>红球 01—33 · 不放回抽取</span><span>蓝球 01—16 · 独立抽取</span></div>
+          </div>
+          <div class="trial-controls">
+            <label class="trial-speed-control" for="trial-speed"><span>滚动速度</span><span class="trial-select-wrap"><select id="trial-speed" aria-label="试命滚动速度"><option value="80">慢</option><option value="250">中</option><option value="700">快</option><option value="10000" selected>瞬间</option></select></span></label>
+            <button id="trial-toggle" class="primary-button trial-toggle" type="button" disabled><span>开始试命</span><span aria-hidden="true">↗</span></button>
+          </div>
+          <p class="quiet-line">命中条件：6个红球和1个蓝球全部相同。可以随时停止，再继续本次试算。</p>
+        </div>
+
+        <aside class="settings-panel trial-stats-panel">
+          <div class="panel-top"><span class="section-label">02 / 试算进度</span><span id="trial-status" class="small-tag">等待数据</span></div>
+          <h2>把时间换成数字。</h2>
+          <p class="settings-copy">目标号码来自最近三期中的最新一期。每模拟一注，就记作经历了一期。</p>
+          <fieldset class="mode-switch trial-mode-switch"><legend class="sr-only">试命随机模式</legend>
+            <label><input type="radio" name="trial-mode" value="weighted" checked><span>微调加权</span></label>
+            <label><input type="radio" name="trial-mode" value="uniform"><span>纯随机</span></label>
+          </fieldset>
+          <p id="trial-mode-note" class="trial-mode-note">正在读取真实数据权重…</p>
+          <div class="trial-target">
+            <span class="tiny-label">目标期号</span>
+            <strong id="trial-target-issue">读取中</strong>
+            <span id="trial-target-numbers" class="trial-target-numbers">-- -- -- -- -- -- + --</span>
+          </div>
+          <div class="trial-stat-grid">
+            <div class="trial-stat"><span>经历期数</span><strong id="trial-periods">0</strong><small>每期 1 注</small></div>
+            <div class="trial-stat"><span>折算年数</span><strong id="trial-years">0.00</strong><small>按每年 156 期</small></div>
+            <div class="trial-stat"><span>估算花费</span><strong id="trial-cost">0</strong><small>每注 2 元</small></div>
+          </div>
+          <div class="formula-note"><span class="tiny-label">精确命中概率</span><p id="trial-probability">1 / 17,721,088</p><small>这是所有6红+1蓝组合的总数，不代表实际一定需要这么多期。</small></div>
+        </aside>
+      </section>
+
+      <section class="trial-notes">
+        <span class="section-label">03 / 读懂这场试算</span>
+        <h2>它会很久，也可能刚好很快。</h2>
+        <p>试命使用浏览器提供的操作系统安全随机源，每次模拟一注完整的双色球号码；它不是历史开奖回放，也不会把模拟号码写入“我的号码”或真实数据缓存。</p>
+        <p>“折算年数”按双色球每周3期估算，“花费”按每期购买1注2元计算。停止后可以继续，统计会从当前进度接着累计。</p>
+        <a class="source-link" href="./">返回摇号台 ↗</a>
+      </section>
+    </main>
+
+    <footer><span>一摇 · 本地运行，独立工具，非官方开奖系统。</span><span>小额娱乐，量力而行。试命只是概率演示。</span></footer>
+  </div>
+  <div id="trial-toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

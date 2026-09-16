@@ -182,6 +182,9 @@ def create_server(store, port=8765):
                 files = {'/': ('index.html', 'text/html; charset=utf-8'),
                          '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
                          '/style.css': ('style.css', 'text/css; charset=utf-8'),
+                         '/trial.html': ('trial.html', 'text/html; charset=utf-8'),
+                         '/trial.js': ('trial.js', 'text/javascript; charset=utf-8'),
+                         '/trial.css': ('trial.css', 'text/css; charset=utf-8'),
                          '/favicon.svg': ('favicon.svg', 'image/svg+xml')}
                 if parsed.path not in files:
                     self.send(404, {'error': 'Not found'})

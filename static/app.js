@@ -131,6 +131,13 @@ function renderHistory() {
   }
 }
 
+function updateTrialLink() {
+  const link = $('trial');
+  if (!link) return;
+  const issue = state?.latest3?.[0]?.issue;
+  link.href = issue ? `trial.html?issue=${encodeURIComponent(issue)}` : 'trial.html';
+}
+
 async function loadState() {
   try {
     state = await api('api/state');
@@ -143,6 +150,7 @@ async function loadState() {
     $('notice').textContent = state.error ? `${state.error}。微调模式暂停；你仍可主动选择纯随机。`
       : '尚无有效的最新数据，或缓存已超过24小时。微调暂停；纯随机不依赖历史数据。';
     renderHistory();
+    updateTrialLink();
     renderBatchButtons();
     updateControls();
     const signature = `${state.last_success}:${state.weighted_available}:${$('strength').value}`;
