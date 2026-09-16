@@ -24,6 +24,7 @@ let lastBlue = 0;
 let periods = 0;
 let running = false;
 let hit = false;
+const prizeCounts = {2: 0, 3: 0, 4: 0, 5: 0, 6: 0};
 
 function toast(message) {
   $('trial-toast').textContent = message;
@@ -61,6 +62,13 @@ function updateStats() {
   $('trial-periods').textContent = periods.toLocaleString('zh-CN');
   $('trial-years').textContent = (periods / DRAWS_PER_YEAR).toFixed(2);
   $('trial-cost').textContent = (periods * TICKET_COST).toLocaleString('zh-CN');
+  updatePrizeStats();
+}
+
+function updatePrizeStats() {
+  for (let level = 2; level <= 6; level += 1) {
+    $('trial-prize-' + level).textContent = prizeCounts[level].toLocaleString('zh-CN');
+  }
 }
 
 function updateControls() {
@@ -101,6 +109,16 @@ function weightedPick(weights, size = weights.length) {
   throw new Error('试命抽样失败');
 }
 
+function evaluateTrialPrize(redMatches, blueMatch) {
+  if (redMatches === 6 && blueMatch) return 1;
+  if (redMatches === 6) return 2;
+  if (redMatches === 5 && blueMatch) return 3;
+  if (redMatches === 5 || (redMatches === 4 && blueMatch)) return 4;
+  if (redMatches === 4 || (redMatches === 3 && blueMatch)) return 5;
+  if (blueMatch) return 6;
+  return 0;
+}
+
 function drawTrialTicket() {
   let matches = 0;
   const weighted = document.querySelector('input[name="trial-mode"]:checked')?.value === 'weighted';
@@ -131,7 +149,8 @@ function drawTrialTicket() {
     lastBlue = randomBelow(16) + 1;
     for (let index = 0; index < 6; index += 1) redUsed[redScratch[index]] = 0;
   }
-  return matches === 6 && lastBlue === target.blue;
+  const blueMatch = lastBlue === target.blue;
+  return {hit: matches === 6 && blueMatch, level: evaluateTrialPrize(matches, blueMatch)};
 }
 
 function renderProgress() {
@@ -156,7 +175,10 @@ function runFrame() {
     while (running && attempts < limit) {
       attempts += 1;
       periods += 1;
-      if (drawTrialTicket()) {
+      const result = drawTrialTicket();
+      const level = result.level;
+      if (level >= 2 && level <= 6) prizeCounts[level] += 1;
+      if (result.hit) {
         hit = true;
         running = false;
         break;
@@ -185,6 +207,7 @@ function startTrial() {
   if (hit) {
     periods = 0;
     hit = false;
+    for (let level = 2; level <= 6; level += 1) prizeCounts[level] = 0;
     renderTicket($('trial-balls'), [], 0, true);
   }
   running = true;

@@ -86,6 +86,12 @@ class FrontendControlTests(unittest.TestCase):
         self.assertIn('trial-periods', script)
         self.assertIn('trial-years', script)
         self.assertIn('trial-cost', script)
+        self.assertIn('id="trial-prizes"', page)
+        for level in range(2, 7):
+            self.assertIn(f'id="trial-prize-{level}"', page)
+        self.assertIn('function evaluateTrialPrize', script)
+        self.assertIn('prizeCounts[level] += 1', script)
+        self.assertIn('function updatePrizeStats', script)
         self.assertIn('命中', script)
 
 
