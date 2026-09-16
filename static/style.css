@@ -14,3 +14,13 @@
 .schedule-label{font-size:11px}.fixed-interval{border:1px solid #c9d3be;background:#eff2e7;border-radius:5px;padding:6px 8px;font-size:10px;color:#4d6246;white-space:nowrap}
 .recent-batch{display:flex;align-items:center;gap:3px}.batch-delete{border:0!important;background:transparent!important;padding:4px 3px!important;color:#b78d7c!important;font:11px var(--mono)!important}.batch-delete:hover{color:var(--red)!important;background:#f8ece6!important}
 .prize-row .prize-level{margin-left:auto}.prize-amount{min-width:72px;text-align:right;color:#7c8872;font:10px var(--mono)}.prize-row.won .prize-amount{color:var(--red)}.prize-row.no-prize .prize-amount{color:#a3aa9e}
+
+/* 试命悬浮浮标:默认跟随右下角,滚动到真实数据区块时停靠在原试命入口旁 */
+.trial-float{position:fixed;right:26px;bottom:26px;z-index:60;display:flex;align-items:center;gap:8px;padding:13px 20px;background:var(--green);color:#f1f4e9;border:0;border-radius:999px;font-size:13px;letter-spacing:1px;box-shadow:0 8px 22px #234d3b33;transition:bottom .3s ease,transform .2s ease,background .2s;white-space:nowrap}
+.trial-float:hover{background:#306046;transform:translateY(-2px)}
+.trial-float.trial-float-pinned{bottom:auto;top:var(--trial-pin-top,0px);border:1px solid #c9dac0;background:#fff;color:#4d6246;box-shadow:0 4px 14px #234d3b22;padding:9px 13px;font-size:11px;border-radius:999px}
+.trial-float-pinned .trial-float-sub{display:inline;margin-left:5px;color:#8a957f;font-size:9px}
+@media(max-width:760px){.trial-float{right:16px;bottom:16px;padding:12px 16px;font-size:12px}.trial-float-sub{font-size:10px}}
+.trial-float-sub{font-size:10px;opacity:.9}
+.trial-float-hidden{opacity:0;visibility:hidden;pointer-events:none;transform:scale(.9)}
+.trial-float{transition:bottom .3s ease,transform .2s ease,background .2s,opacity .25s ease,visibility .25s}
