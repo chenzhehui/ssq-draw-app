@@ -505,3 +505,34 @@ $('weights-details').addEventListener('toggle', () => { if ($('weights-details')
 if (batches.length) renderBatch(batches[0]);
 loadState();
 setInterval(loadState, 30000);
+
+/* 试命悬浮浮标:默认右下角跟随;滚动到真实数据区块时改为停靠形态(右缘+对齐锚点行),避免遮挡 */
+(function () {
+  const floatBtn = $('trial-float');
+  if (!floatBtn) return;
+  const anchor = $('trial');
+  const pinnedClass = 'trial-float-pinned';
+  const update = () => {
+    if (!anchor) return;
+    // 页面顶部不显示,避免遮挡;滚动后才出现
+    const visible = window.scrollY > 40;
+    const rect = anchor.getBoundingClientRect();
+    // 锚点进入视口时停靠到其所在行(右缘吸住)
+    const inView = rect.top < window.innerHeight - 20 && rect.bottom > 60;
+    if (!visible) {
+      floatBtn.classList.add('trial-float-hidden');
+      floatBtn.classList.remove(pinnedClass);
+    } else if (inView) {
+      floatBtn.classList.remove('trial-float-hidden');
+      const top = Math.max(rect.top, 8);
+      floatBtn.style.setProperty('--trial-pin-top', top + 'px');
+      floatBtn.classList.add(pinnedClass);
+    } else {
+      floatBtn.classList.remove('trial-float-hidden');
+      floatBtn.classList.remove(pinnedClass);
+    }
+  };
+  window.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update);
+  update();
+})();
