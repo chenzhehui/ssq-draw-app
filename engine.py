@@ -13,6 +13,7 @@ SOURCE = 'https://www.gdfc.org.cn/charts/ssq/indicators.html?period=50'
 RULE_VERSION = 'micro-delta-v1'
 BASE_WEIGHT = 10000
 MAX_ROLLS = 500_000
+MAX_TOTAL_ROLLS = 100_000
 PRIZE_LEVELS = ('一等奖', '二等奖', '三等奖', '四等奖', '五等奖', '六等奖', '福运奖', '未中奖')
 PRIZE_AMOUNTS = {
     '一等奖': None,
@@ -154,6 +155,17 @@ def validate_roll_range(roll_range):
     return minimum, maximum
 
 
+def validate_total_rolls(count, maximum):
+    """Bound a single request's worst-case total draw cost (notes x per-note rolls)."""
+    if type(count) is not int or not 1 <= count <= 20:
+        raise ValueError('每次只能摇1-20注')
+    total = count * maximum
+    if total > MAX_TOTAL_ROLLS:
+        raise ValueError(
+            f'单次请求总摇动次数最多{MAX_TOTAL_ROLLS}，当前 {count} 注 × 每注最多 {maximum} 次 = {total} 次，超出上限')
+    return total
+
+
 def choose_roll_counts(count, roll_range=None, randbelow=None):
     if type(count) is not int or not 1 <= count <= 20:
         raise ValueError('每次只能摇1-20注')
@@ -190,6 +202,7 @@ def draw_batch(count=5, mode='uniform', strength=5, history=None, roll_range=Non
     if mode not in ('uniform', 'weighted') or type(strength) is not int or not 0 <= strength <= 10:
         raise ValueError('摇号模式或微调上限无效')
     roll_range = validate_roll_range(roll_range)
+    validate_total_rolls(count, roll_range[1])
     if mode == 'weighted':
         if not history:
             raise ValueError('无法获取数据，不能使用微调模式')

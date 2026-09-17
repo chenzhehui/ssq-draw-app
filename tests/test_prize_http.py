@@ -37,6 +37,35 @@ class PrizeHTTPTests(unittest.TestCase):
                 server.server_close()
                 thread.join(timeout=2)
 
+    def test_draw_is_rejected_when_concurrency_limit_is_exhausted(self):
+        app = importlib.import_module('app')
+        with tempfile.TemporaryDirectory() as folder:
+            store = app.DataStore(Path(folder), fetcher=lambda: [])
+            server = app.create_server(store, 0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f'http://127.0.0.1:{server.server_port}'
+            try:
+                with urlopen(base + '/api/state') as response:
+                    state = json.load(response)
+                headers = {'Content-Type': 'application/json', 'X-App-Token': state['token']}
+                body = json.dumps({'count': 1, 'mode': 'uniform', 'strength': 0}).encode()
+                # 占满全部并发名额
+                self.assertTrue(server.draw_semaphore.acquire(blocking=False))
+                self.assertTrue(server.draw_semaphore.acquire(blocking=False))
+                try:
+                    with self.assertRaises(HTTPError) as caught:
+                        urlopen(Request(base + '/api/draw', data=body, headers=headers))
+                    self.assertEqual(caught.exception.code, 503)
+                    caught.exception.close()
+                finally:
+                    server.draw_semaphore.release()
+                    server.draw_semaphore.release()
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
     def test_trial_page_and_assets_are_served(self):
         app = importlib.import_module('app')
         with tempfile.TemporaryDirectory() as folder:

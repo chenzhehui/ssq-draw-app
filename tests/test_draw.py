@@ -38,6 +38,23 @@ class DrawTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     engine.choose_roll_counts(1, value, randbelow=lambda _: 0)
 
+    def test_total_roll_cap_rejects_oversized_batch(self):
+        engine = importlib.import_module('engine')
+        self.assertEqual(engine.MAX_TOTAL_ROLLS, 100_000)
+        # 注数 × 每注最大次数 超过上限时拒绝
+        with self.assertRaises(ValueError):
+            engine.validate_total_rolls(20, 5001)  # 100020 > 100000
+        with self.assertRaises(ValueError):
+            engine.validate_total_rolls(1, 100_001)
+        # 恰好等于上限是允许的
+        self.assertEqual(engine.validate_total_rolls(20, 5000), 100_000)
+        self.assertEqual(engine.validate_total_rolls(1, 100_000), 100_000)
+
+    def test_draw_batch_enforces_total_roll_cap(self):
+        engine = importlib.import_module('engine')
+        with self.assertRaises(ValueError):
+            engine.draw_batch(20, 'uniform', 0, None, (5001, 5001))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parent
 MAX_AGE = 24 * 3600
 REFRESH_INTERVAL_HOURS = 12
 PUBLIC_ORIGIN = os.environ.get('SSQ_PUBLIC_ORIGIN', '').strip().rstrip('/')
+MAX_CONCURRENT_DRAWS = 2
 
 
 def timestamp(value):
@@ -206,17 +207,29 @@ def create_server(store, port=8765):
                 if not isinstance(data, dict):
                     raise ValueError('需要JSON对象')
                 if self.path == '/api/draw':
-                    mode = data.get('mode', 'uniform')
-                    history, checked_at = store.weighted_snapshot() if mode == 'weighted' else (None, None)
-                    batch = draw_batch(data.get('count', 5), mode, data.get('strength', 5), history, data.get('roll_range'))
-                    batch['data_checked_at'] = checked_at
-                    self.send(200, batch)
+                    if not self.server.draw_semaphore.acquire(blocking=False):
+                        self.send(503, {'error': '系统繁忙，请稍后再试'})
+                        return
+                    try:
+                        mode = data.get('mode', 'uniform')
+                        history, checked_at = store.weighted_snapshot() if mode == 'weighted' else (None, None)
+                        batch = draw_batch(data.get('count', 5), mode, data.get('strength', 5), history, data.get('roll_range'))
+                        batch['data_checked_at'] = checked_at
+                        self.send(200, batch)
+                    finally:
+                        self.server.draw_semaphore.release()
                 elif self.path == '/api/reroll':
-                    mode = data.get('mode', 'uniform')
-                    history, checked_at = store.weighted_snapshot() if mode == 'weighted' else (None, None)
-                    strength = data.get('strength', 5 if mode == 'weighted' else 0)
-                    batch = draw_batch(1, mode, strength, history, data.get('roll_range'))
-                    self.send(200, {'ticket': batch['tickets'][0], 'roll_counts': batch['roll_counts'], 'data_checked_at': checked_at})
+                    if not self.server.draw_semaphore.acquire(blocking=False):
+                        self.send(503, {'error': '系统繁忙，请稍后再试'})
+                        return
+                    try:
+                        mode = data.get('mode', 'uniform')
+                        history, checked_at = store.weighted_snapshot() if mode == 'weighted' else (None, None)
+                        strength = data.get('strength', 5 if mode == 'weighted' else 0)
+                        batch = draw_batch(1, mode, strength, history, data.get('roll_range'))
+                        self.send(200, {'ticket': batch['tickets'][0], 'roll_counts': batch['roll_counts'], 'data_checked_at': checked_at})
+                    finally:
+                        self.server.draw_semaphore.release()
                 elif self.path == '/api/refresh':
                     store.request_refresh()
                     self.send(202, {'accepted': True})
@@ -240,6 +253,7 @@ def create_server(store, port=8765):
 
     server = ThreadingHTTPServer(('127.0.0.1', port), Handler)
     server.token = secrets.token_hex(32)
+    server.draw_semaphore = threading.BoundedSemaphore(MAX_CONCURRENT_DRAWS)
     return server
 
 

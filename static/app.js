@@ -5,6 +5,7 @@ const format = (n) => String(n).padStart(2, '0');
 const storageKey = 'yiyao.batches.v1';
 const MAX_DRAW_COUNT = 20;
 const MAX_ROLL_COUNT = 500000;
+const MAX_TOTAL_ROLLS = 100000;
 const DRAW_TIMEOUT_MS = 300000;
 let state = null;
 let current = null;
@@ -412,6 +413,10 @@ async function draw() {
   const range = parseCountRange();
   if (!range) {
     toast(`摇动次数范围无效，请填写1或最小-最大（范围1-${MAX_ROLL_COUNT}）`);
+    return;
+  }
+  if (count * range.max > MAX_TOTAL_ROLLS) {
+    toast(`单次总摇动次数最多${MAX_TOTAL_ROLLS}次，当前 ${count} 注 × 每注最多 ${range.max} 次 = ${count * range.max} 次，请减少注数或摇动次数`);
     return;
   }
   busy = true; editingIndex = null; clearPrizeCheck(); updateControls();
