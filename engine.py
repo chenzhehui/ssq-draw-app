@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 SOURCE = 'https://www.gdfc.org.cn/charts/ssq/indicators.html?period=50'
 RULE_VERSION = 'micro-delta-v1'
 BASE_WEIGHT = 10000
+MAX_ROLLS = 500_000
 PRIZE_LEVELS = ('一等奖', '二等奖', '三等奖', '四等奖', '五等奖', '六等奖', '福运奖', '未中奖')
 PRIZE_AMOUNTS = {
     '一等奖': None,
@@ -116,6 +117,15 @@ def sample_without_replacement(weights, count, randbelow=None):
     if not 0 <= count <= len(weights) or any(type(w) is not int or w <= 0 for w in weights):
         raise ValueError('无效的抽样权重或数量')
     randbelow = randbelow or secrets.randbelow
+    if len(set(weights)) == 1:
+        pool = list(range(1, len(weights) + 1))
+        selected = []
+        for _ in range(count):
+            index = randbelow(len(pool))
+            if not 0 <= index < len(pool):
+                raise ValueError('随机源返回值越界')
+            selected.append(pool.pop(index))
+        return selected
     pool = list(enumerate(weights, start=1))
     selected = []
     for _ in range(count):
@@ -132,11 +142,54 @@ def sample_without_replacement(weights, count, randbelow=None):
     return selected
 
 
-def draw_batch(count=5, mode='uniform', strength=5, history=None):
+def validate_roll_range(roll_range):
+    if roll_range is None:
+        return 1, 1
+    if (not isinstance(roll_range, (list, tuple)) or len(roll_range) != 2
+            or any(type(value) is not int for value in roll_range)):
+        raise ValueError('摇动次数范围必须是两个整数')
+    minimum, maximum = roll_range
+    if not 1 <= minimum <= maximum <= MAX_ROLLS:
+        raise ValueError(f'摇动次数范围只能是1-{MAX_ROLLS}，且最小值不能大于最大值')
+    return minimum, maximum
+
+
+def choose_roll_counts(count, roll_range=None, randbelow=None):
+    if type(count) is not int or not 1 <= count <= 20:
+        raise ValueError('每次只能摇1-20注')
+    minimum, maximum = validate_roll_range(roll_range)
+    randbelow = randbelow or secrets.randbelow
+    span = maximum - minimum + 1
+    selected = []
+    for _ in range(count):
+        value = randbelow(span)
+        if not 0 <= value < span:
+            raise ValueError('随机源返回值越界')
+        selected.append(minimum + value)
+    return selected
+
+
+def draw_ticket(weights, rolls=1, randbelow=None):
+    """Draw one ticket by running every requested round and keeping the last one."""
+    if type(rolls) is not int or not 1 <= rolls <= MAX_ROLLS:
+        raise ValueError(f'摇动次数范围只能是1-{MAX_ROLLS}')
+    randbelow = randbelow or secrets.randbelow
+    red_weights = [r['weight'] for r in weights['red']]
+    blue_weights = [r['weight'] for r in weights['blue']]
+    ticket = None
+    for _ in range(rolls):
+        red = sample_without_replacement(red_weights, 6, randbelow=randbelow)
+        blue = sample_without_replacement(blue_weights, 1, randbelow=randbelow)[0]
+        ticket = {'red': sorted(red), 'blue': blue}
+    return ticket
+
+
+def draw_batch(count=5, mode='uniform', strength=5, history=None, roll_range=None):
     if type(count) is not int or not 1 <= count <= 20:
         raise ValueError('每次只能摇1-20注')
     if mode not in ('uniform', 'weighted') or type(strength) is not int or not 0 <= strength <= 10:
         raise ValueError('摇号模式或微调上限无效')
+    roll_range = validate_roll_range(roll_range)
     if mode == 'weighted':
         if not history:
             raise ValueError('无法获取数据，不能使用微调模式')
@@ -148,15 +201,16 @@ def draw_batch(count=5, mode='uniform', strength=5, history=None):
     snapshot = {'rule_version': RULE_VERSION if mode == 'weighted' else 'uniform-v1',
                 'mode': mode, 'strength': strength if mode == 'weighted' else 0,
                 'latest_issue': history[0]['issue'] if mode == 'weighted' else None,
+                'roll_range': list(roll_range),
                 'weights': weights}
     snapshot_id = hashlib.sha256(json.dumps(snapshot, sort_keys=True).encode()).hexdigest()
+    roll_counts = choose_roll_counts(count, roll_range)
     tickets = []
-    for _ in range(count):
-        red = sample_without_replacement([r['weight'] for r in weights['red']], 6)
-        blue = sample_without_replacement([r['weight'] for r in weights['blue']], 1)[0]
-        tickets.append({'red': sorted(red), 'blue': blue})
+    for rolls in roll_counts:
+        tickets.append(draw_ticket(weights, rolls))
     return {'batch_id': secrets.token_hex(8), 'created_at': datetime.now(timezone.utc).isoformat(),
             'tickets': tickets, 'snapshot_id': snapshot_id, 'snapshot': snapshot,
+            'roll_counts': roll_counts,
             'random_source': 'secrets.randbelow / OS CSPRNG',
             'notice': '允许跨注重复；加权是偏好，不是经过验证的中奖优势。'}
 

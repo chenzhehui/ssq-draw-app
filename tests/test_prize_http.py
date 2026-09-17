@@ -13,6 +13,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 class PrizeHTTPTests(unittest.TestCase):
+    def test_draw_keeps_ticket_count_and_returns_independent_roll_counts(self):
+        app = importlib.import_module('app')
+        with tempfile.TemporaryDirectory() as folder:
+            store = app.DataStore(Path(folder), fetcher=lambda: [])
+            server = app.create_server(store, 0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f'http://127.0.0.1:{server.server_port}'
+            try:
+                with urlopen(base + '/api/state') as response:
+                    state = json.load(response)
+                headers = {'Content-Type': 'application/json', 'X-App-Token': state['token']}
+                body = json.dumps({'count': 5, 'mode': 'uniform', 'strength': 0, 'roll_range': [2, 4]}).encode()
+                with urlopen(Request(base + '/api/draw', data=body, headers=headers)) as response:
+                    result = json.load(response)
+                self.assertEqual(len(result['tickets']), 5)
+                self.assertEqual(len(result['roll_counts']), 5)
+                self.assertTrue(all(2 <= count <= 4 for count in result['roll_counts']))
+                self.assertEqual(result['snapshot']['roll_range'], [2, 4])
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
     def test_trial_page_and_assets_are_served(self):
         app = importlib.import_module('app')
         with tempfile.TemporaryDirectory() as folder:

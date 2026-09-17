@@ -3,6 +3,9 @@
 const $ = (id) => document.getElementById(id);
 const format = (n) => String(n).padStart(2, '0');
 const storageKey = 'yiyao.batches.v1';
+const MAX_DRAW_COUNT = 20;
+const MAX_ROLL_COUNT = 500000;
+const DRAW_TIMEOUT_MS = 300000;
 let state = null;
 let current = null;
 let busy = false;
@@ -77,7 +80,8 @@ function dateText(value, full = false) {
 
 async function api(path, body) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 25000);
+  const timeout = path === 'api/draw' || path === 'api/reroll' ? DRAW_TIMEOUT_MS : 25000;
+  const timer = setTimeout(() => controller.abort(), timeout);
   try {
     const response = await fetch(path, {
       method: body === undefined ? 'GET' : 'POST',
@@ -106,6 +110,8 @@ function updateControls() {
   $('draw-label').textContent = busy ? '正在摇号…' : !state ? '等待本地服务' : weighted && !state.weighted_available ? '请先更新数据' : '开始摇号';
   $('refresh').disabled = !state || state.refreshing;
   $('refresh').textContent = state?.refreshing ? '正在更新…' : '立即更新 ↻';
+  $('roll-range-toggle').disabled = busy;
+  document.querySelectorAll('.roll-range-fields input').forEach((input) => { input.disabled = busy; });
   $('check-prize').disabled = busy || !prizeReady || editingIndex !== null;
   $('check-prize').textContent = current && !prizeReady ? '等待开奖' : '自动算奖';
   $('clear').disabled = busy || !current || editingIndex !== null;
@@ -224,13 +230,16 @@ async function rerollTicket(batch, index) {
   busy = true; editingIndex = null; clearPrizeCheck(); updateControls();
   try {
     const weighted = batch.snapshot?.mode === 'weighted';
+    const rollRange = batch.snapshot?.roll_range || [1, 1];
     const result = await api('api/reroll', {
       mode: weighted ? 'weighted' : 'uniform',
       strength: weighted ? Number(batch.snapshot.strength) : 0,
+      roll_range: rollRange,
     });
     if (!validBatch({ tickets: [result.ticket] })) throw new Error('返回的号码格式异常，已停止替换');
     if (!batch.original_tickets) batch.original_tickets = batch.tickets.map((item) => ({ red: [...item.red], blue: item.blue }));
     batch.tickets[index] = result.ticket;
+    if (Array.isArray(batch.roll_counts) && batch.roll_counts.length === batch.tickets.length) batch.roll_counts[index] = result.roll_counts?.[0] || 1;
     batch.edited = true; batch.edited_at = new Date().toISOString();
     persistBatches();
     busy = false;
@@ -272,7 +281,8 @@ function renderBatch(batch) {
   $('result-count').textContent = `${batch.tickets.length}注 · ${weighted ? '微调加权' : '纯随机'}${batch.edited ? ' · 已修改' : ''}`;
   $('machine-caption').textContent = `首注预览 · ${dateText(batch.created_at)} · ${weighted ? '微调加权' : '纯随机'}`;
   $('receipt').hidden = false;
-  $('receipt').textContent = `${dateText(batch.created_at, true)} / 批次 ${batch.batch_id || ''} / 快照 ${(batch.snapshot_id || '').slice(0, 12)}${issue ? ` / 目标期号 ${issue}` : ''}${weighted ? ` / 数据期号 ${batch.snapshot.latest_issue} / 最大±${batch.snapshot.strength}%` : ' / 历史权重未参与'}${batch.edited ? ' / 已手动修改' : ''}`;
+  const rollCounts = Array.isArray(batch.roll_counts) && batch.roll_counts.length === batch.tickets.length ? ` / 每注摇动 ${batch.roll_counts.join(',')} 次` : '';
+  $('receipt').textContent = `${dateText(batch.created_at, true)} / 批次 ${batch.batch_id || ''} / 快照 ${(batch.snapshot_id || '').slice(0, 12)}${issue ? ` / 目标期号 ${issue}` : ''}${weighted ? ` / 数据期号 ${batch.snapshot.latest_issue} / 最大±${batch.snapshot.strength}%` : ' / 历史权重未参与'}${rollCounts}${batch.edited ? ' / 已手动修改' : ''}`;
   $('copy').disabled = false; $('export').disabled = false; $('plain-details').hidden = false; $('prize-options').hidden = false;
   $('plain-output').value = plainText(batch); $('plain-output').rows = Math.min(batch.tickets.length + 1, 12);
   showBalls(batch.tickets[0]); renderBatchButtons(); updateControls();
@@ -371,19 +381,45 @@ async function checkPrize() {
   finally { button.textContent = '自动算奖'; updateControls(); }
 }
 
+function parseCountRange() {
+  const min = Math.trunc(Number($('roll-min').value));
+  const max = Math.trunc(Number($('roll-max').value));
+  if (!Number.isSafeInteger(min) || !Number.isSafeInteger(max) || min < 1 || min > max || max > MAX_ROLL_COUNT) return null;
+  return { min, max };
+}
+
+function updateRollRangeSummary() {
+  const range = parseCountRange();
+  $('roll-range-summary').textContent = range ? `${range.min === range.max ? range.min : `${range.min}-${range.max}`} 次/注` : '范围有误';
+}
+
+function toggleRollRange() {
+  const fields = $('roll-range-fields');
+  const expanded = fields.hidden;
+  fields.hidden = !expanded;
+  $('roll-range-toggle').setAttribute('aria-expanded', String(expanded));
+  $('roll-range-toggle').lastElementChild.textContent = expanded ? '－' : '＋';
+}
+
 function countValue() {
   const count = Math.trunc(Number($('count').value));
-  return Math.max(1, Math.min(20, Number.isFinite(count) ? count : 5));
+  return Math.max(1, Math.min(MAX_DRAW_COUNT, Number.isFinite(count) ? count : 5));
 }
 
 async function draw() {
   if (busy) return;
   const count = countValue(); $('count').value = String(count);
+  const range = parseCountRange();
+  if (!range) {
+    toast(`摇动次数范围无效，请填写1或最小-最大（范围1-${MAX_ROLL_COUNT}）`);
+    return;
+  }
   busy = true; editingIndex = null; clearPrizeCheck(); updateControls();
   $('machine').classList.remove('is-revealing'); $('machine').classList.add('is-spinning'); showBalls(null);
-  $('machine-caption').textContent = '交给系统随机源，正在抽取…';
+  const rollText = range.min === range.max ? `${range.min}次` : `${range.min}-${range.max}次`;
+  $('machine-caption').textContent = `交给系统随机源，正在抽取${count}注，每注摇动${rollText}…`;
   try {
-    const batch = await api('api/draw', { count, mode: mode(), strength: Number($('strength').value) });
+    const batch = await api('api/draw', { count, mode: mode(), strength: Number($('strength').value), roll_range: [range.min, range.max] });
     if (!validBatch(batch)) throw new Error('返回的号码格式异常，已停止显示');
     batch.reference_issue = state?.latest3?.[0]?.issue || null;
     batch.target_issue = nextIssue(batch.reference_issue);
@@ -430,8 +466,11 @@ async function loadWeights() {
 
 $('draw').addEventListener('click', draw);
 $('minus').addEventListener('click', () => { $('count').value = String(Math.max(1, countValue() - 1)); });
-$('plus').addEventListener('click', () => { $('count').value = String(Math.min(20, countValue() + 1)); });
+$('plus').addEventListener('click', () => { $('count').value = String(Math.min(MAX_DRAW_COUNT, countValue() + 1)); });
 $('count').addEventListener('change', () => { $('count').value = String(countValue()); });
+$('roll-range-toggle').addEventListener('click', toggleRollRange);
+document.querySelectorAll('.roll-range-fields input').forEach((input) => input.addEventListener('input', updateRollRangeSummary));
+updateRollRangeSummary();
 document.querySelectorAll('input[name="mode"]').forEach((input) => input.addEventListener('change', () => {
   updateControls(); if ($('weights-details').open) loadWeights();
 }));

@@ -40,11 +40,20 @@
               <label><input type="radio" name="mode" value="weighted"><span>微调加权</span></label>
             </fieldset>
             <p id="mode-description" class="mode-description">每颗球权重相同。历史开奖不参与本次选择。</p>
+            <div class="roll-range-control">
+              <button id="roll-range-toggle" class="roll-range-toggle" type="button" aria-expanded="false" aria-controls="roll-range-fields"><span>摇动次数</span><strong id="roll-range-summary">1 次/注</strong><span class="roll-range-chevron" aria-hidden="true">＋</span></button>
+              <div id="roll-range-fields" class="roll-range-fields" hidden>
+                <label for="roll-min">最小<input id="roll-min" type="number" min="1" max="500000" value="1" inputmode="numeric" aria-label="每注最小摇动次数"></label>
+                <span aria-hidden="true">至</span>
+                <label for="roll-max">最大<input id="roll-max" type="number" min="1" max="500000" value="1" inputmode="numeric" aria-label="每注最大摇动次数"></label>
+                <small>每注独立随机；最小值和最大值相同表示固定次数。</small>
+              </div>
+            </div>
             <div class="action-line">
               <div class="quantity"><label for="count">一次摇</label><div class="stepper"><button id="minus" type="button" aria-label="减少注数">−</button><input id="count" type="number" min="1" max="20" value="5" inputmode="numeric" aria-label="摇号注数"><button id="plus" type="button" aria-label="增加注数">+</button></div><span>注</span></div>
               <button id="draw" class="primary-button" type="button" disabled><span id="draw-label">连接摇号台…</span><span aria-hidden="true">↗</span></button>
             </div>
-            <p class="quiet-line">允许号码重复，不设置冷热配额，也不因上次选过而排除。</p>
+            <p class="quiet-line">注数决定最终输出几注；每注的摇动次数独立随机。展开“摇动次数”即可设置范围，最大500000次。</p>
           </div>
         </div>
 
